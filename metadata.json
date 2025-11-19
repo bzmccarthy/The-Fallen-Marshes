@@ -1,0 +1,5 @@
+{
+  "name": "Odd Portraiture",
+  "description": "Generates atmospheric, gritty, and weird character portraits for the Into the Odd TTRPG using Google Gemini and Imagen.",
+  "requestFramePermissions": []
+}
