@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ApiProvider } from '../types';
 
@@ -49,6 +50,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ current, onChange,
             title="Instant, Low Fidelity. Uses Turbo model."
         >
             Turbo
+        </button>
+        <div className="w-px bg-odd-border"></div>
+        <button
+            onClick={() => onChange('search')}
+            disabled={disabled}
+            className={`px-3 py-1 text-xs font-bold uppercase transition-all ${
+                current === 'search' 
+                ? 'bg-odd-accent text-odd-bg' 
+                : 'text-odd-muted hover:text-odd-text hover:bg-white/5'
+            }`}
+            title="Uses Google Search to find existing images."
+        >
+            Search
         </button>
       </div>
     </div>

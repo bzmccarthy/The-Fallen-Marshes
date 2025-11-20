@@ -1,3 +1,4 @@
+
 export interface AbilityScores {
   STR: number;
   DEX: number;
@@ -39,4 +40,4 @@ export interface APIError {
   code?: string;
 }
 
-export type ApiProvider = 'gemini' | 'flux' | 'turbo';
+export type ApiProvider = 'gemini' | 'flux' | 'turbo' | 'search';

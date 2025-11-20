@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { CharacterSheet } from './components/CharacterSheet';
 import { ImageDisplay } from './components/ImageDisplay';
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const getProviderName = (p: ApiProvider) => {
     if (p === 'gemini') return 'Gemini';
     if (p === 'flux') return 'Flux';
+    if (p === 'search') return 'Search';
     return 'Turbo';
   };
 
@@ -54,9 +56,9 @@ const App: React.FC = () => {
               // Add a delay between requests to prevent hitting rate limits (Resource Exhausted)
               // Skip delay for the first one for immediate feedback
               // Gemini needs stricter delays, Flux is usually okay but good to be safe.
-              // We skip delay entirely for Turbo to maximize speed.
-              if (i > 0 && apiProvider !== 'turbo') {
-                  const delay = apiProvider === 'gemini' ? 2000 : 1000;
+              // We skip delay entirely for Turbo and Search to maximize speed.
+              if (i > 0 && apiProvider !== 'turbo' && apiProvider !== 'search') {
+                  const delay = (apiProvider === 'gemini') ? 2000 : 1000;
                   await new Promise(resolve => setTimeout(resolve, delay));
               }
 

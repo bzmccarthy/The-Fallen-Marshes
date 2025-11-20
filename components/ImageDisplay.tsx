@@ -44,6 +44,16 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
   };
 
   const handleDownload = async (image: GeneratedImage) => {
+    // Special handling for Search Links
+    if (image.url.includes('#external_link=')) {
+        const match = image.url.match(/#external_link=(.+)$/);
+        if (match) {
+            const url = decodeURIComponent(match[1]);
+            window.open(url, '_blank');
+        }
+        return;
+    }
+
     try {
         // Attempt to fetch blob to force a clean download
         const response = await fetch(image.url);
@@ -105,6 +115,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
 
   // Main Display (Images exist, might be loading more)
   const selectedImage = images.find(img => img.id === selectedId) || images[0];
+  const isSearchLink = selectedImage.url.includes('#external_link=');
 
   return (
     <div className="flex flex-col gap-6">
@@ -160,7 +171,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
                         disabled={failedImages.has(selectedImage.id)}
                         className="flex-1 text-xs py-2"
                     >
-                        Keep {selectedImage.mood}
+                        {isSearchLink ? `Browse ${selectedImage.mood} on Google` : `Keep ${selectedImage.mood}`}
                     </Button>
                 </div>
             </div>
