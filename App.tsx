@@ -60,7 +60,7 @@ const App: React.FC = () => {
                   await new Promise(resolve => setTimeout(resolve, delay));
               }
 
-              const enhancedPrompt = await enhancePrompt(char, mood, apiProvider === 'turbo');
+              const enhancedPrompt = await enhancePrompt(char, mood);
               
               // Update message for image generation phase
               setStatusMessage(`Developing Plate ${i+1}/${TARGET_MOODS.length}: ${mood}...`);

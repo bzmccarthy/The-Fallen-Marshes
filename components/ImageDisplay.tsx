@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { GeneratedImage } from '../types';
 import { Button } from './Button';
@@ -149,7 +150,7 @@ export const ImageDisplay: React.FC<ImageDisplayProps> = ({
                     </span>
                     <span className="text-odd-muted text-xs font-mono">{selectedImage.id}</span>
                 </div>
-                <p className="text-odd-text font-serif italic mb-4 text-sm opacity-80 line-clamp-2">
+                <p className="text-odd-text font-serif italic mb-4 text-sm opacity-80 max-h-60 overflow-y-auto whitespace-pre-wrap pr-2 scrollbar-thin scrollbar-thumb-odd-border scrollbar-track-transparent">
                     "{selectedImage.prompt}"
                 </p>
                 <div className="flex gap-2">

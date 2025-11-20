@@ -2,19 +2,44 @@ import { GoogleGenAI } from "@google/genai";
 import { Character, ApiProvider } from '../types';
 
 /**
- * Uses a text model to rewrite character stats into a specific artistic prompt.
- * Now enforces distinct artistic mediums to ensure visual variety.
+ * Uses a deterministic template to create character prompts.
+ * Replaces previous LLM-based enhancement to ensure speed and consistency.
  */
-export const enhancePrompt = async (character: Character, targetMood: string, fastMode: boolean = false): Promise<string> => {
-  // Initialize client per request to ensure we use the most current API Key
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-  const { name, gender, occupation, capability, equipment, oddity, abilities, arcanum } = character;
+export const enhancePrompt = async (character: Character, targetMood: string): Promise<string> => {
+  const { gender, occupation, capability, equipment, oddity, abilities, arcanum } = character;
 
   const highestStat = Object.entries(abilities).reduce((a, b) => a[1] > b[1] ? a : b)[0];
-  const physicalDesc = highestStat === 'STR' ? 'Burly, strong features, thick neck' : 
-                       highestStat === 'DEX' ? 'Sharp features, intense eyes, wiry' : 
-                       'Gaunt, pale, focused expression, cerebral';
+  
+  // Random variations based on highest stat to ensure variety
+  const strOptions = [
+      'Burly physique, strong jaw, thick neck, scarred knuckles',
+      'Broad-shouldered, imposing presence, weathered skin, heavy brow',
+      'Muscular build, resolute expression, veins prominent, sturdy',
+      'Stocky, battered features, aura of toughness, physical fortitude'
+  ];
+
+  const dexOptions = [
+      'Lean and lithe, restless eyes, wiry frame, long fingers',
+      'Slender, graceful posture, nimble, alert and twitchy',
+      'Athletic build, quick movements, sharp bird-like features',
+      'Sinuous, poised, cat-like eyes, coiled energy'
+  ];
+
+  const wilOptions = [
+      'Intense gaze, commanding presence, stern expression, disciplined',
+      'Charismatic smirk, focused eyes, air of authority, confident',
+      'Upright posture, piercing stare, unnervingly calm',
+      'Magnetic personality visible in eyes, stoic, calculating'
+  ];
+
+  let physicalDesc = "";
+  if (highestStat === 'STR') {
+      physicalDesc = strOptions[Math.floor(Math.random() * strOptions.length)];
+  } else if (highestStat === 'DEX') {
+      physicalDesc = dexOptions[Math.floor(Math.random() * dexOptions.length)];
+  } else {
+      physicalDesc = wilOptions[Math.floor(Math.random() * wilOptions.length)];
+  }
 
   // Map moods to specific art style instructions
   let styleDetails = "";
@@ -35,58 +60,8 @@ export const enhancePrompt = async (character: Character, targetMood: string, fa
       styleDetails = "Medium: Mixed Media. Style: Industrial grit, textured.";
   }
 
-  // Optimization: For Turbo mode, we skip the LLM round-trip (which takes ~2-3s)
-  // and construct a deterministic prompt. This ensures "Turbo" is actually fast.
-  if (fastMode) {
-      return `(Style: ${targetMood}) ${styleDetails} Subject: Close-up portrait of ${name}, ${gender} ${occupation}. Appearance: ${physicalDesc}. ${oddity ? `Distinction: ${oddity}.` : ''} Equipment: ${equipment.slice(0,2).join(', ')}.`;
-  }
-
-  const systemInstruction = `You are an expert art director for the TTRPG "Into the Odd". 
-  Your task is to take character sheet data and convert it into a detailed image generation prompt.
-  
-  The "Into the Odd" aesthetic is:
-  - Industrial Revolution meets Weird Science.
-  - Eras: 18th/19th Century.
-  - Atmosphere: Eerie, foggy, industrial, eccentric.
-  
-  CRITICAL FRAMING: You must generate prompts for CLOSE-UP PORTRAITS (Bust/Headshot). 
-  Focus strictly on the face, head, and shoulders. 
-  Do NOT describe full body poses, legs, or environments. 
-  This is for a Virtual Tabletop (VTT) token.
-
-  You must output a prompt that strictly adheres to the provided TARGET VISUAL STYLE.
-  Output ONLY the raw prompt string. No markdown.`;
-
-  const userPrompt = `Create a close-up portrait prompt for this character:
-  - Name: ${name}
-  - Gender: ${gender}
-  - Occupation: ${occupation}
-  - Capability/Trait: ${capability}
-  - Physical Description: ${physicalDesc}
-  - Distinctive Feature: ${oddity || 'None'}
-  - Key Equipment (Visible only if near face/shoulders): ${equipment.slice(0, 2).join(', ')}
-  - Arcanum (Magic Item): ${arcanum ? arcanum.name + ' (' + arcanum.description + ')' : 'None'}
-  
-  TARGET VISUAL STYLE:
-  ${styleDetails}
-  
-  Framing: Tight close-up on the face and shoulders. High detail on the expression and texture.`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.8,
-      }
-    });
-
-    return response.text || `A gritty ${targetMood} close-up portrait of a ${gender} ${occupation}, ${physicalDesc}, style of Into the Odd.`;
-  } catch (error) {
-    console.error("Error enhancing prompt:", error);
-    throw error;
-  }
+  // Construct a deterministic template prompt.
+  return `(Style: ${targetMood}) ${styleDetails} Subject: Close-up portrait of a ${gender} ${occupation}. Appearance: ${physicalDesc}. ${oddity ? `Distinction: ${oddity}.` : ''} Equipment: ${equipment.slice(0,2).join(', ')}.`;
 };
 
 /**
