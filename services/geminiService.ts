@@ -1,14 +1,14 @@
-import { GoogleGenAI, Modality } from "@google/genai";
-import { Character } from '../types';
-
-const apiKey = process.env.API_KEY;
-const ai = new GoogleGenAI({ apiKey: apiKey || '' });
+import { GoogleGenAI } from "@google/genai";
+import { Character, ApiProvider } from '../types';
 
 /**
  * Uses a text model to rewrite character stats into a specific artistic prompt.
  * Now enforces distinct artistic mediums to ensure visual variety.
  */
 export const enhancePrompt = async (character: Character, targetMood: string): Promise<string> => {
+  // Initialize client per request to ensure we use the most current API Key
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
   const { name, gender, occupation, capability, equipment, oddity, abilities, arcanum } = character;
 
   const highestStat = Object.entries(abilities).reduce((a, b) => a[1] > b[1] ? a : b)[0];
@@ -79,36 +79,131 @@ export const enhancePrompt = async (character: Character, targetMood: string): P
     return response.text || `A gritty ${targetMood} close-up portrait of a ${gender} ${occupation}, ${physicalDesc}, style of Into the Odd.`;
   } catch (error) {
     console.error("Error enhancing prompt:", error);
-    return `A close-up face portrait of a ${gender} ${occupation} named ${name}, ${physicalDesc}, ${oddity ? oddity : 'industrial fantasy'}, ${targetMood} style.`;
+    throw error;
   }
 };
 
 /**
- * Generates the actual image using Gemini 2.5 Flash Image.
- * This uses the generateContent API with responseModalities: ['IMAGE'].
+ * Generates image using Google Gemini (Imagen 3).
+ * Fast, high quality, but subject to quotas and safety filters.
  */
-export const generateCharacterPortrait = async (prompt: string): Promise<string> => {
+const generateWithGemini = async (prompt: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [{ text: prompt }],
-      },
+    const response = await ai.models.generateImages({
+      model: 'imagen-4.0-generate-001',
+      prompt: prompt + ", masterpiece, best quality, detailed, 8k, artstation, into the odd style",
       config: {
-        responseModalities: [Modality.IMAGE],
-      },
+        numberOfImages: 1,
+        outputMimeType: 'image/jpeg',
+        aspectRatio: '1:1',
+      }
     });
 
-    const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    const base64 = response.generatedImages?.[0]?.image?.imageBytes;
+    if (!base64) throw new Error("Gemini returned no image data.");
     
-    if (!part || !part.inlineData) {
-      console.warn("Full API Response for debugging:", JSON.stringify(response, null, 2));
-      throw new Error("No image data returned from API. The prompt may have triggered safety filters.");
-    }
+    return `data:image/jpeg;base64,${base64}`;
+  } catch (error: any) {
+    console.error("Gemini Image Gen Error:", error);
+    
+    let msg = "The ether is thick. Gemini visualisation failed.";
+    if (error.message?.includes("safety")) msg = "The vision was too disturbing (Safety Filter Triggered).";
+    if (error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED")) msg = "The mind's eye is exhausted (Quota Exceeded).";
+    if (error.message?.includes("404") || error.message?.includes("NOT_FOUND")) msg = "The specific vision engine is unavailable (Model Not Found).";
 
-    return `data:image/png;base64,${part.inlineData.data}`;
-  } catch (error) {
-    console.error("Error generating image:", error);
-    throw error;
+    throw new Error(msg);
+  }
+};
+
+/**
+ * Generates image using Pollinations.ai (Flux model).
+ * Slower, but unlimited and less censored.
+ */
+const generateWithPollinations = async (prompt: string): Promise<string> => {
+  const ATTEMPTS = 3;
+  const MAX_PROMPT_LENGTH = 800; // URL length safety
+
+  // Truncate prompt if too long to prevent 400/414 errors
+  const safeBasePrompt = prompt.length > MAX_PROMPT_LENGTH 
+    ? prompt.substring(0, MAX_PROMPT_LENGTH) 
+    : prompt;
+
+  for (let i = 0; i < ATTEMPTS; i++) {
+    try {
+      // Encode the prompt safely for URL
+      const safePrompt = encodeURIComponent(safeBasePrompt + ", masterpiece, best quality, detailed, 8k, artstation");
+      
+      // Generate a random seed to ensure unique results for the same prompt
+      const seed = Math.floor(Math.random() * 1000000);
+      
+      // Construct Pollinations URL
+      const url = `https://pollinations.ai/p/${safePrompt}?width=768&height=768&seed=${seed}&model=flux&nologo=true`;
+
+      // We use the Image object to preload and verify the image exists.
+      // This bypasses CORS restrictions that often block 'fetch' requests for images from 3rd parties.
+      await new Promise<void>((resolve, reject) => {
+        const img = new Image();
+        let timer: ReturnType<typeof setTimeout>;
+
+        const cleanup = () => {
+           if (timer) clearTimeout(timer);
+           img.onload = null;
+           img.onerror = null;
+        };
+        
+        img.onload = () => {
+          cleanup();
+          resolve();
+        };
+        
+        img.onerror = () => {
+          cleanup();
+          // If it fails immediately, it might be a momentary glitch or strict network blocking.
+          reject(new Error("Pollinations image failed to load via DOM"));
+        };
+        
+        // Set a 60s timeout.
+        // If it takes this long, we assume it's just slow/busy but valid.
+        // We RESOLVE with the URL so the App doesn't crash/error out.
+        timer = setTimeout(() => {
+           console.warn("Image generation taking long (>60s), proceeding with render assuming lag.");
+           cleanup();
+           resolve(); 
+        }, 60000);
+
+        // Trigger load
+        img.src = url;
+      });
+
+      // If promise resolves, we are good to go
+      return url;
+
+    } catch (error) {
+      console.warn(`Attempt ${i + 1} to generate image failed:`, error);
+      
+      // If this was the last attempt, throw exception
+      if (i === ATTEMPTS - 1) {
+         console.error("Final attempt failed.", error);
+         throw new Error("The ether is thick. Visualisation failed.");
+      }
+      
+      // Wait a bit before retrying
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+
+  throw new Error("The ether is thick. Visualisation failed.");
+};
+
+/**
+ * Main generation entry point
+ */
+export const generateCharacterPortrait = async (prompt: string, provider: ApiProvider): Promise<string> => {
+  if (provider === 'gemini') {
+    return generateWithGemini(prompt);
+  } else {
+    return generateWithPollinations(prompt);
   }
 };

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { CharacterSheet } from './components/CharacterSheet';
 import { ImageDisplay } from './components/ImageDisplay';
+import { ModelSelector } from './components/ModelSelector';
 import { enhancePrompt, generateCharacterPortrait } from './services/geminiService';
 import { generateCharacter } from './services/characterGenerator';
-import { Character, GeneratedImage, GenerationStatus, Gender } from './types';
+import { Character, GeneratedImage, GenerationStatus, Gender, ApiProvider } from './types';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -21,58 +22,92 @@ const App: React.FC = () => {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [character, setCharacter] = useState<Character | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [apiProvider, setApiProvider] = useState<ApiProvider>('pollinations');
+
+  // Reusable function to generate images for a specific character
+  const generatePortraitsForCharacter = async (char: Character) => {
+    try {
+        setError(null);
+        setGeneratedImages([]); 
+        setStatus('enhancing');
+        setStatusMessage(`Initializing visualisation protocols for ${char.name}...`);
+  
+        let successfulCount = 0;
+
+        // Process moods sequentially to avoid Rate Limits (429)
+        for (let i = 0; i < TARGET_MOODS.length; i++) {
+            const mood = TARGET_MOODS[i];
+            
+            setStatus('generating');
+            setStatusMessage(`Processing Plate ${i+1}/${TARGET_MOODS.length}: ${mood} via ${apiProvider === 'gemini' ? 'Gemini' : 'Flux'}...`);
+
+            try {
+              // Add a delay between requests to prevent hitting rate limits (Resource Exhausted)
+              // Skip delay for the first one for immediate feedback
+              if (i > 0) {
+                  await new Promise(resolve => setTimeout(resolve, apiProvider === 'gemini' ? 2000 : 1500));
+              }
+
+              const enhancedPrompt = await enhancePrompt(char, mood);
+              
+              // Update message for image generation phase
+              setStatusMessage(`Developing Plate ${i+1}/${TARGET_MOODS.length}: ${mood}...`);
+              
+              const imageUrl = await generateCharacterPortrait(enhancedPrompt, apiProvider);
+              
+              const newImage: GeneratedImage = {
+                id: generateId(),
+                url: imageUrl,
+                prompt: enhancedPrompt,
+                mood: mood,
+                characterName: char.name,
+                timestamp: Date.now(),
+              };
+
+              // Update state incrementally so user sees images as they arrive
+              setGeneratedImages(prev => [...prev, newImage]);
+              successfulCount++;
+
+            } catch (e: any) {
+              console.error(`Failed to generate mood ${mood}:`, e);
+              
+              // For rate limits, we log and continue to try the next one after a longer pause
+              if (e.toString().includes("429") || e.toString().includes("RESOURCE_EXHAUSTED")) {
+                  console.warn("Rate limit hit, pausing before next attempt.");
+                  setStatusMessage("Ether congested. Cooling down logic engines...");
+                  await new Promise(resolve => setTimeout(resolve, 4000));
+              } else if (e.toString().includes("Safety")) {
+                  // If Gemini safety blocks it, maybe try the next mood or just fail this one silently
+                   setStatusMessage("Visual too disturbing for the ether. Skipping...");
+              }
+            }
+        }
+        
+        if (successfulCount === 0) {
+          throw new Error(`All portrait attempts failed via ${apiProvider}. Try switching providers.`);
+        }
+  
+        setStatus('complete');
+    } catch (err: any) {
+        console.error(err);
+        setStatus('error');
+        setError(err.message || 'The ether is clouded. The portraiture machine malfunctioned.');
+    }
+  };
 
   const handleRollAndGenerate = async (gender: Gender) => {
-    try {
-      setError(null);
-      setGeneratedImages([]); 
-      setStatus('generating'); 
-      
       // 1. Generate Character Logic
       const newChar = generateCharacter(gender);
       setCharacter(newChar);
-
-      setStatus('enhancing');
-      setStatusMessage(`Visualizing ${newChar.name}...`);
-
-      // 2. Generate Portraits based on new char
-      const promises = TARGET_MOODS.map(async (mood) => {
-          try {
-            const enhancedPrompt = await enhancePrompt(newChar, mood);
-            const imageUrl = await generateCharacterPortrait(enhancedPrompt);
-            
-            return {
-              id: generateId(),
-              url: imageUrl,
-              prompt: enhancedPrompt,
-              mood: mood,
-              characterName: newChar.name,
-              timestamp: Date.now(),
-            } as GeneratedImage;
-          } catch (e) {
-            console.error(`Failed to generate mood ${mood}:`, e);
-            // We return null here and filter it out later
-            return null;
-          }
-      });
-
-      setStatus('generating');
-      const results = await Promise.all(promises);
       
-      // Filter out failed requests
-      const successfulImages = results.filter((img): img is GeneratedImage => img !== null);
+      // 2. Generate Images
+      await generatePortraitsForCharacter(newChar);
+  };
 
-      if (successfulImages.length === 0) {
-        throw new Error("All portrait attempts failed. The ether is thick today (API Safety or Network Error).");
+  const handleRegeneratePortraits = async () => {
+      if (character) {
+          await generatePortraitsForCharacter(character);
       }
-
-      setGeneratedImages(successfulImages);
-      setStatus('complete');
-    } catch (err: any) {
-      console.error(err);
-      setStatus('error');
-      setError(err.message || 'The ether is clouded. The portraiture machine malfunctioned.');
-    }
   };
 
   return (
@@ -80,15 +115,21 @@ const App: React.FC = () => {
         <div className="fixed inset-0 pointer-events-none z-50 scanline opacity-20"></div>
 
       <header className="border-b-4 border-double border-odd-border bg-odd-dark/80 backdrop-blur-sm sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
+        <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="text-center md:text-left">
             <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tighter text-odd-accent uppercase shadow-black drop-shadow-md">
-              Odd Portraiture
+              The Bastion Registry
             </h1>
             <p className="text-xs md:text-sm text-odd-muted tracking-widest uppercase mt-1">
-              Automatic Character & Likeness Generator
+              Electric Registry of Vagabonds & Visage
             </p>
           </div>
+          
+          <ModelSelector 
+            current={apiProvider} 
+            onChange={setApiProvider} 
+            disabled={status === 'enhancing' || status === 'generating'} 
+          />
         </div>
       </header>
 
@@ -105,7 +146,7 @@ const App: React.FC = () => {
                 <CharacterSheet 
                     character={character} 
                     onRoll={handleRollAndGenerate} 
-                    isLoading={status === 'enhancing' || status === 'generating'} 
+                    isLoading={status === 'enhancing' || (status === 'generating' && generatedImages.length === 0)} 
                 />
             </div>
 
@@ -126,6 +167,8 @@ const App: React.FC = () => {
               images={generatedImages} 
               isLoading={status === 'enhancing' || status === 'generating'} 
               statusText={statusMessage}
+              onRegenerate={handleRegeneratePortraits}
+              hasCharacter={!!character}
             />
           </div>
 

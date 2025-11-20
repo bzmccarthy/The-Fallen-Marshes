@@ -38,3 +38,5 @@ export interface APIError {
   message: string;
   code?: string;
 }
+
+export type ApiProvider = 'gemini' | 'pollinations';
