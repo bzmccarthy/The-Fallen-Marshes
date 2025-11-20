@@ -5,7 +5,7 @@ import { Character, ApiProvider } from '../types';
  * Uses a text model to rewrite character stats into a specific artistic prompt.
  * Now enforces distinct artistic mediums to ensure visual variety.
  */
-export const enhancePrompt = async (character: Character, targetMood: string): Promise<string> => {
+export const enhancePrompt = async (character: Character, targetMood: string, fastMode: boolean = false): Promise<string> => {
   // Initialize client per request to ensure we use the most current API Key
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -33,6 +33,12 @@ export const enhancePrompt = async (character: Character, targetMood: string): P
       break;
     default:
       styleDetails = "Medium: Mixed Media. Style: Industrial grit, textured.";
+  }
+
+  // Optimization: For Turbo mode, we skip the LLM round-trip (which takes ~2-3s)
+  // and construct a deterministic prompt. This ensures "Turbo" is actually fast.
+  if (fastMode) {
+      return `(Style: ${targetMood}) ${styleDetails} Subject: Close-up portrait of ${name}, ${gender} ${occupation}. Appearance: ${physicalDesc}. ${oddity ? `Distinction: ${oddity}.` : ''} Equipment: ${equipment.slice(0,2).join(', ')}.`;
   }
 
   const systemInstruction = `You are an expert art director for the TTRPG "Into the Odd". 
@@ -118,10 +124,10 @@ const generateWithGemini = async (prompt: string): Promise<string> => {
 };
 
 /**
- * Generates image using Pollinations.ai (Flux model).
- * Slower, but unlimited and less censored.
+ * Generates image using Pollinations.ai.
+ * Supports different models (Flux, Turbo).
  */
-const generateWithPollinations = async (prompt: string): Promise<string> => {
+const generateWithPollinations = async (prompt: string, model: 'flux' | 'turbo'): Promise<string> => {
   const ATTEMPTS = 3;
   const MAX_PROMPT_LENGTH = 800; // URL length safety
 
@@ -139,7 +145,7 @@ const generateWithPollinations = async (prompt: string): Promise<string> => {
       const seed = Math.floor(Math.random() * 1000000);
       
       // Construct Pollinations URL
-      const url = `https://pollinations.ai/p/${safePrompt}?width=768&height=768&seed=${seed}&model=flux&nologo=true`;
+      const url = `https://pollinations.ai/p/${safePrompt}?width=768&height=768&seed=${seed}&model=${model}&nologo=true`;
 
       // We use the Image object to preload and verify the image exists.
       // This bypasses CORS restrictions that often block 'fetch' requests for images from 3rd parties.
@@ -161,12 +167,10 @@ const generateWithPollinations = async (prompt: string): Promise<string> => {
         img.onerror = () => {
           cleanup();
           // If it fails immediately, it might be a momentary glitch or strict network blocking.
-          reject(new Error("Pollinations image failed to load via DOM"));
+          reject(new Error(`Pollinations (${model}) image failed to load via DOM`));
         };
         
         // Set a 60s timeout.
-        // If it takes this long, we assume it's just slow/busy but valid.
-        // We RESOLVE with the URL so the App doesn't crash/error out.
         timer = setTimeout(() => {
            console.warn("Image generation taking long (>60s), proceeding with render assuming lag.");
            cleanup();
@@ -203,7 +207,9 @@ const generateWithPollinations = async (prompt: string): Promise<string> => {
 export const generateCharacterPortrait = async (prompt: string, provider: ApiProvider): Promise<string> => {
   if (provider === 'gemini') {
     return generateWithGemini(prompt);
+  } else if (provider === 'turbo') {
+    return generateWithPollinations(prompt, 'turbo');
   } else {
-    return generateWithPollinations(prompt);
+    return generateWithPollinations(prompt, 'flux');
   }
 };

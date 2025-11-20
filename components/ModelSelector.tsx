@@ -20,22 +20,35 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ current, onChange,
                 ? 'bg-odd-accent text-odd-bg' 
                 : 'text-odd-muted hover:text-odd-text hover:bg-white/5'
             }`}
-            title="Fast, High Quality. Uses your API Key quota."
+            title="Fast, High Fidelity. Uses your API Key quota."
         >
             Gemini
         </button>
         <div className="w-px bg-odd-border"></div>
         <button
-            onClick={() => onChange('pollinations')}
+            onClick={() => onChange('flux')}
             disabled={disabled}
             className={`px-3 py-1 text-xs font-bold uppercase transition-all ${
-                current === 'pollinations' 
+                current === 'flux' 
                 ? 'bg-odd-accent text-odd-bg' 
                 : 'text-odd-muted hover:text-odd-text hover:bg-white/5'
             }`}
-            title="Unlimited, Slower. Uses Flux model via Pollinations.ai."
+            title="Slower, Artistic. Uses Flux model."
         >
             Flux
+        </button>
+        <div className="w-px bg-odd-border"></div>
+        <button
+            onClick={() => onChange('turbo')}
+            disabled={disabled}
+            className={`px-3 py-1 text-xs font-bold uppercase transition-all ${
+                current === 'turbo' 
+                ? 'bg-odd-accent text-odd-bg' 
+                : 'text-odd-muted hover:text-odd-text hover:bg-white/5'
+            }`}
+            title="Instant, Low Fidelity. Uses Turbo model."
+        >
+            Turbo
         </button>
       </div>
     </div>

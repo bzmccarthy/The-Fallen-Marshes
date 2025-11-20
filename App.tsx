@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CharacterSheet } from './components/CharacterSheet';
 import { ImageDisplay } from './components/ImageDisplay';
 import { ModelSelector } from './components/ModelSelector';
+import { AudioController } from './components/AudioController';
 import { enhancePrompt, generateCharacterPortrait } from './services/geminiService';
 import { generateCharacter } from './services/characterGenerator';
 import { Character, GeneratedImage, GenerationStatus, Gender, ApiProvider } from './types';
@@ -22,7 +23,15 @@ const App: React.FC = () => {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [character, setCharacter] = useState<Character | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [apiProvider, setApiProvider] = useState<ApiProvider>('pollinations');
+  // Defaulting to Gemini as requested
+  const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini');
+
+  // Helper for display text
+  const getProviderName = (p: ApiProvider) => {
+    if (p === 'gemini') return 'Gemini';
+    if (p === 'flux') return 'Flux';
+    return 'Turbo';
+  };
 
   // Reusable function to generate images for a specific character
   const generatePortraitsForCharacter = async (char: Character) => {
@@ -39,16 +48,19 @@ const App: React.FC = () => {
             const mood = TARGET_MOODS[i];
             
             setStatus('generating');
-            setStatusMessage(`Processing Plate ${i+1}/${TARGET_MOODS.length}: ${mood} via ${apiProvider === 'gemini' ? 'Gemini' : 'Flux'}...`);
+            setStatusMessage(`Processing Plate ${i+1}/${TARGET_MOODS.length}: ${mood} via ${getProviderName(apiProvider)}...`);
 
             try {
               // Add a delay between requests to prevent hitting rate limits (Resource Exhausted)
               // Skip delay for the first one for immediate feedback
-              if (i > 0) {
-                  await new Promise(resolve => setTimeout(resolve, apiProvider === 'gemini' ? 2000 : 1500));
+              // Gemini needs stricter delays, Flux is usually okay but good to be safe.
+              // We skip delay entirely for Turbo to maximize speed.
+              if (i > 0 && apiProvider !== 'turbo') {
+                  const delay = apiProvider === 'gemini' ? 2000 : 1000;
+                  await new Promise(resolve => setTimeout(resolve, delay));
               }
 
-              const enhancedPrompt = await enhancePrompt(char, mood);
+              const enhancedPrompt = await enhancePrompt(char, mood, apiProvider === 'turbo');
               
               // Update message for image generation phase
               setStatusMessage(`Developing Plate ${i+1}/${TARGET_MOODS.length}: ${mood}...`);
@@ -84,7 +96,7 @@ const App: React.FC = () => {
         }
         
         if (successfulCount === 0) {
-          throw new Error(`All portrait attempts failed via ${apiProvider}. Try switching providers.`);
+          throw new Error(`All portrait attempts failed via ${getProviderName(apiProvider)}. Try switching providers.`);
         }
   
         setStatus('complete');
@@ -116,20 +128,23 @@ const App: React.FC = () => {
 
       <header className="border-b-4 border-double border-odd-border bg-odd-dark/80 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="text-center md:text-left">
+          <div className="text-center md:text-left flex-shrink-0">
             <h1 className="font-serif text-3xl md:text-4xl font-bold tracking-tighter text-odd-accent uppercase shadow-black drop-shadow-md">
               The Bastion Registry
             </h1>
             <p className="text-xs md:text-sm text-odd-muted tracking-widest uppercase mt-1">
-              Electric Registry of Vagabonds & Visage
+              Registry of Vagabonds & Visage
             </p>
           </div>
           
-          <ModelSelector 
-            current={apiProvider} 
-            onChange={setApiProvider} 
-            disabled={status === 'enhancing' || status === 'generating'} 
-          />
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+             <AudioController />
+             <ModelSelector 
+                current={apiProvider} 
+                onChange={setApiProvider} 
+                disabled={status === 'enhancing' || status === 'generating'} 
+              />
+          </div>
         </div>
       </header>
 

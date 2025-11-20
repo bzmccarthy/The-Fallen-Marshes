@@ -39,4 +39,4 @@ export interface APIError {
   code?: string;
 }
 
-export type ApiProvider = 'gemini' | 'pollinations';
+export type ApiProvider = 'gemini' | 'flux' | 'turbo';
