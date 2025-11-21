@@ -1,6 +1,22 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Character, ApiProvider } from '../types';
+
+const ODD_FLAVOR_TERMS = [
+  "Victorian industrial era", 
+  "Gritty early Victorian", 
+  "Weird Victorian cosmic horror", 
+  "Soot-stained Victorian factory backdrop", 
+  "Victorian Brass and rust", 
+  "Arcane Victorian machinery", 
+  "Gaslight Victorian atmosphere", 
+  "Strange Victorian evolution", 
+  "Pale Victorian smog", 
+  "Decaying Victorian opulence", 
+  "Galvanic Victorian experiments",
+  "Victorian city slums",
+  "Underground Victorian tunnels",
+  "Star-spawned Victorian influence"
+];
 
 /**
  * Uses a deterministic template to create character prompts.
@@ -13,24 +29,24 @@ export const enhancePrompt = async (character: Character, targetMood: string): P
   
   // Random variations based on highest stat to ensure variety
   const strOptions = [
-      'Burly physique, strong jaw, thick neck, scarred knuckles',
-      'Broad-shouldered, imposing presence, weathered skin, heavy brow',
-      'Muscular build, resolute expression, veins prominent, sturdy',
-      'Stocky, battered features, aura of toughness, physical fortitude'
+      'Burly physique, strong jaw',
+      'Broad-shouldered, weathered skin',
+      'Muscular build, sturdy',
+      'Stocky, battered features'
   ];
 
   const dexOptions = [
-      'Lean and lithe, restless eyes, wiry frame, long fingers',
-      'Slender, graceful posture, nimble, alert and twitchy',
-      'Athletic build, quick movements, sharp bird-like features',
-      'Sinuous, poised, cat-like eyes, coiled energy'
+      'Lean, wiry frame',
+      'Slender, graceful posture',
+      'Athletic build, sharp features',
+      'Sinuous, cat-like eyes'
   ];
 
   const wilOptions = [
-      'Intense gaze, commanding presence, stern expression, disciplined',
-      'Charismatic smirk, focused eyes, air of authority, confident',
-      'Upright posture, piercing stare, unnervingly calm',
-      'Magnetic personality visible in eyes, stoic, calculating'
+      'Intense gaze, stern expression',
+      'Charismatic smirk, focused eyes',
+      'Upright posture, piercing stare',
+      'Magnetic personality, stoic'
   ];
 
   let physicalDesc = "";
@@ -42,27 +58,42 @@ export const enhancePrompt = async (character: Character, targetMood: string): P
       physicalDesc = wilOptions[Math.floor(Math.random() * wilOptions.length)];
   }
 
-  // Map moods to specific art style instructions
+  // Map moods to specific art style instructions for complex models
   let styleDetails = "";
   switch (targetMood) {
     case 'Grim Engraving':
-      styleDetails = "Medium: Copperplate Engraving or Woodcut. Style: High contrast black ink on textured paper. Cross-hatching, thick lines, stark shadows. No color. Rough and gritty.";
+      styleDetails = "Medium: Copperplate Engraving. Style: High contrast black ink, cross-hatching, stark shadows. Rough and gritty.";
       break;
     case 'Desaturated Oil':
-      styleDetails = "Medium: Oil Painting on Canvas. Style: 19th century realism, visible brushstrokes. Palette: Muted, desaturated earth tones (rust, slate, olive, ochre, beige). Low saturation but definitely containing color. Chiaroscuro lighting.";
+      styleDetails = "Medium: Desaturated Oil Painting. Style: Realism, visible brushstrokes. Palette: Muted earth tones (rust, slate, olive). Chiaroscuro.";
       break;
     case 'Ethereal Watercolor':
-      styleDetails = "Medium: Watercolor and Ink Wash. Style: Bleeding edges, wet-on-wet technique. Palette: Pale, ghostly greys, blues, and whites. Atmosphere: Misty, dreamlike, soft focus, translucent.";
+      styleDetails = "Medium: Watercolor. Style: Bleeding edges, wet-on-wet. Palette: Pale greys, blues. Atmosphere: Misty, dreamlike.";
       break;
     case 'Vintage Daguerreotype':
-      styleDetails = "Medium: Early 1850s Photography (Daguerreotype). Style: Heavy film grain, silver nitrate tarnish, scratches, vignette. Palette: Monochromatic sepia or black and white. Hauntingly realistic, slight motion blur.";
+      styleDetails = "Medium: 1850s Daguerreotype. Style: Heavy film grain, silver nitrate tarnish, vignette. Monochromatic sepia. Haunting.";
       break;
     default:
-      styleDetails = "Medium: Mixed Media. Style: Industrial grit, textured.";
+      styleDetails = "Medium: Mixed Media. Style: Industrial grit.";
   }
 
-  // Construct a deterministic template prompt.
-  return `(Style: ${targetMood}) ${styleDetails} Subject: Close-up portrait of a ${gender} ${occupation}. Appearance: ${physicalDesc}. ${oddity ? `Distinction: ${oddity}.` : ''} Equipment: ${equipment.slice(0,2).join(', ')}.`;
+  // Clean equipment strings to remove damage dice (e.g. "Sword (d6)" -> "Sword")
+  // UPDATED: Regex now aggressively targets (d6), (d8 B), and standalone dice notations to prevent them appearing in prompts.
+  const cleanEquipment = equipment.slice(0, 2).map(item => 
+    item.replace(/\s*\([^)]*\)/g, '') // Remove anything in parentheses
+        .replace(/\bd\d+\b/g, '')      // Remove standalone dice notation (d6, d8, etc)
+        .trim()
+  );
+
+  // Select 2 random setting descriptors to add flavor
+  const shuffledFlavor = [...ODD_FLAVOR_TERMS].sort(() => 0.5 - Math.random());
+  const flavor = shuffledFlavor.slice(0, 2).join(', ');
+
+  // Construct a detailed deterministic template prompt for high-fidelity models.
+  // UPDATED: Removed "(Style: Name)" prefix to prevent the model from rendering the text in the image.
+  // UPDATED: Stronger framing constraints (Tightly framed head and shoulders bust portrait)
+  // UPDATED: Added flavor text for setting/atmosphere
+  return `${styleDetails} Setting: ${flavor}. Subject: Tightly framed head and shoulders bust portrait of a ${gender} ${occupation}. Center face. Appearance: ${physicalDesc}. ${oddity ? `Distinction: ${oddity}.` : ''} Wearing: ${cleanEquipment.join(', ')}.`;
 };
 
 /**
@@ -75,7 +106,8 @@ const generateWithGemini = async (prompt: string): Promise<string> => {
   try {
     const response = await ai.models.generateImages({
       model: 'imagen-4.0-generate-001',
-      prompt: prompt + ", masterpiece, best quality, detailed, 8k, artstation, into the odd style",
+      // UPDATED: Added 'headshot, face focus' to suffix
+      prompt: prompt + ", masterpiece, best quality, detailed, 8k, artstation, headshot, face focus",
       config: {
         numberOfImages: 1,
         outputMimeType: 'image/jpeg',
@@ -100,203 +132,74 @@ const generateWithGemini = async (prompt: string): Promise<string> => {
 };
 
 /**
- * Fetches an image from the Art Institute of Chicago API.
- * Great for etchings, engravings, and public domain art.
- * Returns null if no valid image found.
+ * Generates image using Gemini Flash.
+ * Faster, higher quotas, uses gemini-2.5-flash-image.
  */
-const fetchArtInstituteImage = async (query: string): Promise<string | null> => {
-    try {
-        // AIC API parameters
-        // We specifically ask for public domain works
-        const params = new URLSearchParams({
-            q: query,
-            'query[term][is_public_domain]': 'true',
-            limit: '15', // Fetch a batch to allow random selection
-            fields: 'id,title,image_id',
-        });
-        
-        const response = await fetch(`https://api.artic.edu/api/v1/artworks/search?${params.toString()}`);
-        const data = await response.json();
-        
-        const artworks = data?.data;
-        if (!artworks || artworks.length === 0) return null;
-        
-        // Filter for artworks that actually have an image_id
-        const validArtworks = artworks.filter((art: any) => art.image_id);
-        
-        if (validArtworks.length === 0) return null;
+const generateWithFlash = async (prompt: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  try {
+    // Note: Flash models use generateContent, not generateImages
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: {
+        // UPDATED: Added 'headshot, face focus' to suffix
+        parts: [{ text: prompt + ", masterpiece, best quality, detailed, 8k, artstation, headshot, face focus" }]
+      },
+      config: {
+        imageConfig: {
+            aspectRatio: "1:1"
+        }
+      }
+    });
 
-        // Pick a random one for variety
-        const randomArt = validArtworks[Math.floor(Math.random() * validArtworks.length)];
-        
-        // Construct IIIF URL
-        // https://www.artic.edu/iiif/2/{identifier}/full/843,/0/default.jpg
-        return `https://www.artic.edu/iiif/2/${randomArt.image_id}/full/843,/0/default.jpg`;
-
-    } catch (e) {
-        console.error("Art Institute fetch error", e);
-        return null;
+    // Iterate through parts to find the image
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+      if (part.inlineData) {
+        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
     }
-}
-
-/**
- * Generates a Search URL. 
- * Tries to fetch a direct image from Art Institute of Chicago first.
- * Falls back to a Google Search Link Card if no image is found.
- */
-const generateWithSearch = async (prompt: string): Promise<string> => {
-  // Extract Mood from the prompt string we constructed in enhancePrompt
-  // Format: "(Style: Grim Engraving) ..."
-  const styleMatch = prompt.match(/^\(Style: ([^)]+)\)/);
-  const mood = styleMatch ? styleMatch[1] : "Character";
-
-  // Extract Subject components
-  // Format: "... Subject: Close-up portrait of a Male Actor. ..."
-  const subjectMatch = prompt.match(/Subject: Close-up portrait of a ([^.]+)\./);
-  // capture group 1 is "Male Actor"
-  const rawSubject = subjectMatch ? subjectMatch[1] : "Male Character";
-  
-  // 1. Construct Art Institute Query
-  // AIC uses boolean search logic. We want specific mediums for specific moods.
-  let aicQuery = "";
-  
-  // Clean subject: "Male Coal Miner" -> "Miner" often yields better art results than full phrasing
-  // We try to strip "Male" or "Female" to broaden search to the profession/archetype
-  const cleanSubject = rawSubject.replace(/Male |Female /gi, "").trim();
-  
-  // Add gender back in loosely if needed, but profession is usually stronger for visual search
-  const gender = rawSubject.split(" ")[0]; 
-
-  switch (mood) {
-      case 'Grim Engraving': 
-          // Etchings, Lithographs, Engravings
-          aicQuery = `${cleanSubject} etching | engraving | lithograph`; 
-          break;
-      case 'Desaturated Oil': 
-          // Oil paintings, portraits
-          aicQuery = `${cleanSubject} oil painting | portrait`; 
-          break;
-      case 'Ethereal Watercolor': 
-          // Drawings, sketches, washes
-          aicQuery = `${cleanSubject} watercolor | wash drawing | sketch`; 
-          break;
-      case 'Vintage Daguerreotype': 
-          // Photographs (AIC has some, but might need fallback to just portrait/drawing if scarce)
-          aicQuery = `${cleanSubject} photograph | daguerreotype | tintype`; 
-          break;
-      default: 
-          aicQuery = `${cleanSubject} portrait`;
+    
+    throw new Error("Gemini Flash returned no image data.");
+  } catch (error: any) {
+    console.error("Gemini Flash Gen Error:", error);
+    
+    let msg = "The ether is thick. Flash visualisation failed.";
+    if (error.message?.includes("safety")) msg = "The vision was too disturbing (Safety Filter Triggered).";
+    if (error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED")) msg = "The mind's eye is exhausted (Quota Exceeded).";
+    
+    throw new Error(msg);
   }
-
-  // Attempt fetch
-  const artImageUrl = await fetchArtInstituteImage(aicQuery);
-  if (artImageUrl) return artImageUrl;
-
-  // 2. Fallback to Google Search Link Card
-  // Construct the search query
-  const googleQuery = `${mood} ${rawSubject} Into the Odd RPG art`;
-  const searchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(googleQuery)}`;
-
-  // Generate a thematic SVG placeholder
-  const svg = `
-  <svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#44403c" stroke-width="0.5"/>
-      </pattern>
-    </defs>
-    <rect width="100%" height="100%" fill="#1c1917"/>
-    <rect width="100%" height="100%" fill="url(#grid)" opacity="0.2"/>
-    <rect x="20" y="20" width="360" height="360" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="4 2"/>
-    
-    <circle cx="200" cy="160" r="40" fill="none" stroke="#d97706" stroke-width="2"/>
-    <line x1="228" y1="188" x2="250" y2="210" stroke="#d97706" stroke-width="4"/>
-    
-    <text x="50%" y="65%" font-family="Courier, monospace" font-size="20" fill="#e7e5e4" text-anchor="middle" font-weight="bold" letter-spacing="1">NO ARCHIVE FOUND</text>
-    <text x="50%" y="75%" font-family="Courier, monospace" font-size="14" fill="#a8a29e" text-anchor="middle">${mood.toUpperCase()}</text>
-    <text x="50%" y="85%" font-family="Courier, monospace" font-size="10" fill="#44403c" text-anchor="middle">CLICK TO SEARCH GOOGLE</text>
-  </svg>`;
-
-  const base64Svg = btoa(svg);
-  return `data:image/svg+xml;base64,${base64Svg}#external_link=${encodeURIComponent(searchUrl)}`;
 };
 
 /**
  * Generates image using Pollinations.ai.
  * Supports different models (Flux, Turbo).
+ * Returns URL immediately to allow parallel loading in browser.
  */
 const generateWithPollinations = async (prompt: string, model: 'flux' | 'turbo'): Promise<string> => {
-  const ATTEMPTS = 3;
   const MAX_PROMPT_LENGTH = 800; // URL length safety
+  // UPDATED: Added 'headshot, face focus' to suffix
+  const SUFFIX = ", masterpiece, best quality, detailed, 8k, artstation, headshot, face focus";
 
-  // Truncate prompt if too long to prevent 400/414 errors
-  const safeBasePrompt = prompt.length > MAX_PROMPT_LENGTH 
-    ? prompt.substring(0, MAX_PROMPT_LENGTH) 
+  // Truncate prompt if too long to prevent 400/414 errors, reserving space for suffix
+  const availableLength = MAX_PROMPT_LENGTH - SUFFIX.length;
+  const safeBasePrompt = prompt.length > availableLength 
+    ? prompt.substring(0, availableLength) 
     : prompt;
 
-  for (let i = 0; i < ATTEMPTS; i++) {
-    try {
-      // Encode the prompt safely for URL
-      const safePrompt = encodeURIComponent(safeBasePrompt + ", masterpiece, best quality, detailed, 8k, artstation");
-      
-      // Generate a random seed to ensure unique results for the same prompt
-      const seed = Math.floor(Math.random() * 1000000);
-      
-      // Construct Pollinations URL
-      const url = `https://pollinations.ai/p/${safePrompt}?width=768&height=768&seed=${seed}&model=${model}&nologo=true`;
+  // Encode the prompt safely for URL
+  // Adding back the quality suffix to match Gemini/Flash behavior
+  const safePrompt = encodeURIComponent(safeBasePrompt + SUFFIX);
+  
+  // Generate a random seed to ensure unique results for the same prompt
+  const seed = Math.floor(Math.random() * 1000000);
+  
+  // Construct Pollinations URL
+  // Optimizations: 512x512, n=1 (single image)
+  const url = `https://pollinations.ai/p/${safePrompt}?width=512&height=512&seed=${seed}&model=${model}&nologo=true&n=1`;
 
-      // We use the Image object to preload and verify the image exists.
-      // This bypasses CORS restrictions that often block 'fetch' requests for images from 3rd parties.
-      await new Promise<void>((resolve, reject) => {
-        const img = new Image();
-        let timer: ReturnType<typeof setTimeout>;
-
-        const cleanup = () => {
-           if (timer) clearTimeout(timer);
-           img.onload = null;
-           img.onerror = null;
-        };
-        
-        img.onload = () => {
-          cleanup();
-          resolve();
-        };
-        
-        img.onerror = () => {
-          cleanup();
-          // If it fails immediately, it might be a momentary glitch or strict network blocking.
-          reject(new Error(`Pollinations (${model}) image failed to load via DOM`));
-        };
-        
-        // Set a 60s timeout.
-        timer = setTimeout(() => {
-           console.warn("Image generation taking long (>60s), proceeding with render assuming lag.");
-           cleanup();
-           resolve(); 
-        }, 60000);
-
-        // Trigger load
-        img.src = url;
-      });
-
-      // If promise resolves, we are good to go
-      return url;
-
-    } catch (error) {
-      console.warn(`Attempt ${i + 1} to generate image failed:`, error);
-      
-      // If this was the last attempt, throw exception
-      if (i === ATTEMPTS - 1) {
-         console.error("Final attempt failed.", error);
-         throw new Error("The ether is thick. Visualisation failed.");
-      }
-      
-      // Wait a bit before retrying
-      await new Promise(r => setTimeout(r, 1500));
-    }
-  }
-
-  throw new Error("The ether is thick. Visualisation failed.");
+  return url;
 };
 
 /**
@@ -305,8 +208,8 @@ const generateWithPollinations = async (prompt: string, model: 'flux' | 'turbo')
 export const generateCharacterPortrait = async (prompt: string, provider: ApiProvider): Promise<string> => {
   if (provider === 'gemini') {
     return generateWithGemini(prompt);
-  } else if (provider === 'search') {
-    return generateWithSearch(prompt);
+  } else if (provider === 'flash') {
+    return generateWithFlash(prompt);
   } else if (provider === 'turbo') {
     return generateWithPollinations(prompt, 'turbo');
   } else {

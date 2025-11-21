@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CharacterSheet } from './components/CharacterSheet';
 import { ImageDisplay } from './components/ImageDisplay';
 import { ModelSelector } from './components/ModelSelector';
@@ -12,10 +12,10 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 
 // distinct artistic styles to ensure variety
 const TARGET_MOODS = [
+    'Vintage Daguerreotype',
+    'Ethereal Watercolor',
     'Grim Engraving', 
-    'Desaturated Oil', 
-    'Ethereal Watercolor', 
-    'Vintage Daguerreotype'
+    'Desaturated Oil'
 ];
 
 const App: React.FC = () => {
@@ -24,14 +24,23 @@ const App: React.FC = () => {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [character, setCharacter] = useState<Character | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Defaulting to Gemini as requested
-  const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini');
+  // Defaulting to Flash as requested
+  const [apiProvider, setApiProvider] = useState<ApiProvider>('flash');
+
+  // Warm up Pollinations on mount
+  useEffect(() => {
+    const warmUp = () => {
+      // Fire and forget request to warm up the Pollinations server
+      fetch('https://pollinations.ai/p/blank%20white%20square?width=128&height=128&model=flux&n=1').catch(() => {});
+    };
+    warmUp();
+  }, []);
 
   // Helper for display text
   const getProviderName = (p: ApiProvider) => {
     if (p === 'gemini') return 'Gemini';
+    if (p === 'flash') return 'Gemini Flash';
     if (p === 'flux') return 'Flux';
-    if (p === 'search') return 'Search';
     return 'Turbo';
   };
 
@@ -54,14 +63,14 @@ const App: React.FC = () => {
 
             try {
               // Add a delay between requests to prevent hitting rate limits (Resource Exhausted)
-              // Skip delay for the first one for immediate feedback
-              // Gemini needs stricter delays, Flux is usually okay but good to be safe.
-              // We skip delay entirely for Turbo and Search to maximize speed.
-              if (i > 0 && apiProvider !== 'turbo' && apiProvider !== 'search') {
-                  const delay = (apiProvider === 'gemini') ? 2000 : 1000;
+              // Gemini needs stricter delays.
+              // Flux/Turbo can be faster now that we use fire-and-forget URLs.
+              if (i > 0) {
+                  const delay = (apiProvider === 'gemini') ? 2000 : 250; 
                   await new Promise(resolve => setTimeout(resolve, delay));
               }
 
+              // Use full detail prompts for all providers
               const enhancedPrompt = await enhancePrompt(char, mood);
               
               // Update message for image generation phase
